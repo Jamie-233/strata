@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strata"
+version = "0.1.0"
+description = "Network intent compiler: one source of truth in YAML, validated and compiled into Cisco IOS and Huawei VRP configs, diffed against what is running, and deployed safely."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Jamie" }]
+dependencies = [
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+ssh = ["netmiko>=4.3"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+strata = "strata.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+strata = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
