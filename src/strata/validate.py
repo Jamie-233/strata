@@ -57,6 +57,19 @@ def _warn(dev: Device, msg: str) -> Issue:
     return Issue(Severity.WARNING, dev.hostname, msg)
 
 
+def _addr(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Return the IP part of a CIDR string, or None when it does not parse.
+
+    Fleet rules iterate every address in the inventory; a malformed one must not
+    take the whole validate run down with a traceback — the per-device rules
+    already reported it, so here it is simply skipped.
+    """
+    try:
+        return ipaddress.ip_interface(value).ip
+    except ValueError:
+        return None
+
+
 # Cisco reserves 1002-1005 for legacy FDDI/Token Ring; "vlan 1003" is rejected
 # on IOS but accepted on VRP, so the same inventory can fail on half a fleet.
 _IOS_RESERVED = range(1002, 1006)
@@ -133,7 +146,17 @@ def svis_and_routing(dev: Device) -> Iterable[Issue]:
             if not intf.ip:
                 yield _err(dev, f"{intf.name}: routed port without an IP")
                 continue
-            networks.append((intf.name, ipaddress.ip_interface(intf.ip).network))
+            if "/" not in intf.ip:
+                # A bare address is silently read as /32, which renders a
+                # 255.255.255.255 mask and routes nothing. Require the intent.
+                yield _err(dev, f"{intf.name}: '{intf.ip}' needs a prefix length, e.g. {intf.ip}/24")
+                continue
+            try:
+                iface = ipaddress.ip_interface(intf.ip)
+            except ValueError:
+                yield _err(dev, f"{intf.name}: '{intf.ip}' is not a valid CIDR address")
+                continue
+            networks.append((intf.name, iface.network))
 
     # Overlapping connected subnets make the RIB pick one interface and silently
     # blackhole the other; both IOS and VRP will refuse only the exact-duplicate case.
@@ -143,13 +166,17 @@ def svis_and_routing(dev: Device) -> Iterable[Issue]:
                 yield _err(dev, f"{name_a} ({net_a}) overlaps {name_b} ({net_b})")
 
     if dev.default_gateway:
-        gw = ipaddress.ip_address(dev.default_gateway)
-        if networks and not any(gw in net for _, net in networks):
-            yield _err(
-                dev,
-                f"default gateway {gw} is not inside any connected subnet, "
-                "so it can never be resolved via ARP",
-            )
+        try:
+            gw = ipaddress.ip_address(dev.default_gateway)
+        except ValueError:
+            yield _err(dev, f"default gateway '{dev.default_gateway}' is not a valid IP address")
+        else:
+            if networks and not any(gw in net for _, net in networks):
+                yield _err(
+                    dev,
+                    f"default gateway {gw} is not inside any connected subnet, "
+                    "so it can never be resolved via ARP",
+                )
 
 
 @fleet_rule
@@ -158,10 +185,14 @@ def unique_addresses(devices: list[Device]) -> Iterable[Issue]:
     for dev in devices:
         owners[dev.host].append(f"{dev.hostname} (mgmt)")
         for svi in dev.svis:
-            owners[str(ipaddress.ip_interface(svi.ip).ip)].append(f"{dev.hostname} Vlan{svi.vlan}")
+            addr = _addr(svi.ip)
+            if addr is not None:
+                owners[str(addr)].append(f"{dev.hostname} Vlan{svi.vlan}")
         for intf in dev.interfaces:
             if intf.mode == "routed" and intf.ip:
-                owners[str(ipaddress.ip_interface(intf.ip).ip)].append(f"{dev.hostname} {intf.name}")
+                addr = _addr(intf.ip)
+                if addr is not None:
+                    owners[str(addr)].append(f"{dev.hostname} {intf.name}")
 
     for addr, claimants in owners.items():
         if len(claimants) > 1:
