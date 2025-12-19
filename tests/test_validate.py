@@ -61,6 +61,29 @@ def test_mgmt_ip_equal_to_own_svi_is_fine(make_device):
     assert messages(validate([dev])) == []
 
 
+def test_two_svis_on_one_device_sharing_an_address_is_reported(make_device):
+    # Same device is not a licence to reuse an address: two SVIs on one
+    # address flap ARP just as badly as two devices on it.
+    dev = make_device(
+        vlans=[{"id": 10}, {"id": 20}],
+        svis=[{"vlan": 10, "ip": "10.0.5.1/24"}, {"vlan": 20, "ip": "10.0.5.1/24"}],
+    )
+    assert any("10.0.5.1 is also used by" in m for m in messages(validate([dev])))
+
+
+def test_mgmt_ip_equal_to_a_routed_port_is_reported(make_device):
+    dev = make_device(interfaces=[{"name": "Gi0/0", "mode": "routed", "ip": "10.0.99.2/24"}])
+    assert any("10.0.99.2 is also used by" in m for m in messages(validate([dev])))
+
+
+def test_mgmt_plus_one_svi_plus_another_svi_is_reported(make_device):
+    dev = make_device(
+        vlans=[{"id": 10}, {"id": 99}],
+        svis=[{"vlan": 99, "ip": "10.0.99.2/24"}, {"vlan": 10, "ip": "10.0.99.2/24"}],
+    )
+    assert any("10.0.99.2 is also used by" in m for m in messages(validate([dev])))
+
+
 def test_malformed_routed_ip_is_reported_not_crash(make_device):
     dev = make_device(interfaces=[{"name": "Gi0/1", "mode": "routed", "ip": "192.0.2.300/24"}])
     assert any("not a valid CIDR" in m for m in messages(validate([dev])))
