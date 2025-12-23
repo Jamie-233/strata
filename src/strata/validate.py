@@ -201,12 +201,16 @@ def unique_addresses(devices: list[Device]) -> Iterable[Issue]:
     for addr, claims in owners.items():
         if len(claims) < 2:
             continue
-        # The single legitimate repetition: one device, one management address,
-        # and exactly one SVI carrying it. Anything else is a duplicate that
-        # will flap ARP or blackhole traffic somewhere.
+        # One device may point its management address at one of its own
+        # interfaces: the SVI it lives on, or the routed port it is managed
+        # through. Two interfaces on one address is still the loop this rule
+        # exists for, so the shape has to be exactly mgmt + one interface.
         hosts = {c[0] for c in claims}
         kinds = sorted(c[1] for c in claims)
-        if len(hosts) == 1 and kinds == ["mgmt", "svi"] and len(claims) == 2:
+        if len(hosts) == 1 and len(claims) == 2 and kinds in (
+            ["mgmt", "svi"],
+            ["mgmt", "routed"],
+        ):
             continue
         labels = [f"{host} ({label})" if kind == "mgmt" else f"{host} {label}"
                   for host, kind, label in claims]
