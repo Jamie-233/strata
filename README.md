@@ -18,6 +18,12 @@ inventory.yml ──▶ validate ──▶ render ──▶ diff vs running ─�
 
 Most small and mid-size networks are configured by hand, one switch at a time. That works until the day someone adds a guest VLAN to the core but forgets one access trunk, and a floor of access points loses guest Wi-Fi with no error anywhere. Strata treats the inventory as the single source of truth and the device configs as build artifacts, so that class of mistake is caught before anything touches a switch.
 
+## Why not...
+
+- **...Ansible or Nornir with Jinja2?** They are general automation frameworks with large ecosystems. Strata is small on purpose: its value is a validated intent model and a diff that understands config structure, not task orchestration. Use them for what Strata does not do.
+- **...Batfish?** Batfish analyses real configurations, including routing and reachability behaviour, which Strata does not attempt. The two fit together: render with Strata, then analyse the result with Batfish.
+- **...asking an LLM to write the config?** A model can draft a config in seconds, but nothing guarantees it will not reuse an address or put a VLAN on an access port that the trunk does not carry. Strata's rules are deterministic, run before anything is sent, and the diff shows the exact lines that would change. They combine well: let a model draft the YAML and let Strata judge it.
+
 ## Features
 
 - **One source of truth** — `defaults → group → device` precedence, so per-site settings live in one place and a device only states what makes it different.
@@ -116,6 +122,15 @@ src/strata/
   cli.py         validate / render / diff / backup / push
   templates/     cisco_ios.j2, huawei_vrp.j2
 ```
+
+## What has been verified
+
+| Area | How | Not yet |
+|---|---|---|
+| Intent model and precedence merge, validation rules (including the duplicate-address cases) | unit tests | - |
+| IOS and VRP rendering | tests assert the expected blocks and syntax differences | **rendered configs have not been loaded onto real or emulated devices** (no eNSP, CML or hardware run) |
+| Structure-aware diff | tests on constructed configs | not compared against real `show running-config` / `display current-configuration` output |
+| `backup` and `push` | tests with a fake connection: commands sent, config saved, always disconnects, one failing device does not abort the batch | no real SSH session to a switch |
 
 ## Development
 
