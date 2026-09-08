@@ -1,0 +1,75 @@
+hostname {{ device.hostname }}
+!
+{% if vars.domain is defined %}
+ip domain-name {{ vars.domain }}
+{% endif %}
+{% for dns in vars.get('dns_servers', []) %}
+ip name-server {{ dns }}
+{% endfor %}
+{% if vars.timezone is defined %}
+clock timezone {{ vars.timezone.name }} {{ vars.timezone.offset }} 0
+{% endif %}
+{% for ntp in vars.get('ntp_servers', []) %}
+ntp server {{ ntp }}
+{% endfor %}
+!
+{% for vlan in device.vlans %}
+vlan {{ vlan.id }}
+ name {{ vlan.name }}
+{% endfor %}
+!
+{% for intf in device.interfaces %}
+interface {{ intf.name }}
+{% if intf.description %}
+ description {{ intf.description }}
+{% endif %}
+{% if intf.mode == 'access' %}
+ switchport mode access
+ switchport access vlan {{ intf.vlan }}
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+{% elif intf.mode == 'trunk' %}
+{# Only multi-encapsulation platforms (3560/3750-era) accept this line;
+   Catalyst 2960/9000 reject it and abort the rest of the interface block. #}
+{% if vars.get('trunk_encapsulation_cmd', false) %}
+ switchport trunk encapsulation dot1q
+{% endif %}
+ switchport mode trunk
+ switchport nonegotiate
+{% if intf.native_vlan %}
+ switchport trunk native vlan {{ intf.native_vlan }}
+{% endif %}
+ switchport trunk allowed vlan {{ intf.allowed_vlans | vlan_ranges }}
+{% elif intf.mode == 'routed' %}
+ no switchport
+ ip address {{ intf.ip | ip_only }} {{ intf.ip | netmask }}
+{% elif intf.mode == 'shutdown' %}
+ shutdown
+{% endif %}
+{% if intf.poe %}
+ power inline auto
+{% endif %}
+{% if intf.mode != 'shutdown' %}
+ no shutdown
+{% endif %}
+!
+{% endfor %}
+{% for svi in device.svis %}
+interface Vlan{{ svi.vlan }}
+ description {{ svi.description or vlan_names.get(svi.vlan, '') }}
+ ip address {{ svi.ip | ip_only }} {{ svi.ip | netmask }}
+{% if svi.dhcp_relay %}
+ ip helper-address {{ svi.dhcp_relay }}
+{% endif %}
+ no shutdown
+!
+{% endfor %}
+{% if device.default_gateway %}
+{% if vars.get('ip_routing', false) %}
+ip routing
+ip route 0.0.0.0 0.0.0.0 {{ device.default_gateway }}
+{% else %}
+ip default-gateway {{ device.default_gateway }}
+{% endif %}
+{% endif %}
+end

@@ -1,0 +1,73 @@
+sysname {{ device.hostname }}
+#
+{% if vars.timezone is defined %}
+clock timezone {{ vars.timezone.name }} add {{ '%02d' | format(vars.timezone.offset) }}:00:00
+{% endif %}
+{% for ntp in vars.get('ntp_servers', []) %}
+ntp-service unicast-server {{ ntp }}
+{% endfor %}
+{% if vars.get('dns_servers') %}
+dns resolve
+{% for dns in vars.dns_servers %}
+dns server {{ dns }}
+{% endfor %}
+{% endif %}
+{% if vars.domain is defined %}
+dns domain {{ vars.domain }}
+{% endif %}
+#
+{% if device.vlans %}
+vlan batch {{ device.vlans | map(attribute='id') | list | vrp_vlan_list }}
+{% for vlan in device.vlans %}
+vlan {{ vlan.id }}
+ description {{ vlan.name }}
+{% endfor %}
+#
+{% endif %}
+{% if device.svis | selectattr('dhcp_relay') | list %}
+dhcp enable
+#
+{% endif %}
+{% for intf in device.interfaces %}
+interface {{ intf.name }}
+{% if intf.description %}
+ description {{ intf.description }}
+{% endif %}
+{% if intf.mode == 'access' %}
+ port link-type access
+ port default vlan {{ intf.vlan }}
+ stp edged-port enable
+ stp bpdu-protection
+{% elif intf.mode == 'trunk' %}
+ port link-type trunk
+{% if intf.native_vlan %}
+ port trunk pvid vlan {{ intf.native_vlan }}
+{% endif %}
+ undo port trunk allow-pass vlan 1
+ port trunk allow-pass vlan {{ intf.allowed_vlans | vrp_vlan_list }}
+{% elif intf.mode == 'routed' %}
+ undo portswitch
+ ip address {{ intf.ip | ip_only }} {{ intf.ip | prefixlen }}
+{% elif intf.mode == 'shutdown' %}
+ shutdown
+{% endif %}
+{% if intf.poe %}
+ poe enable
+{% endif %}
+#
+{% endfor %}
+{% for svi in device.svis %}
+interface Vlanif{{ svi.vlan }}
+ description {{ svi.description or vlan_names.get(svi.vlan, '') }}
+ ip address {{ svi.ip | ip_only }} {{ svi.ip | prefixlen }}
+{% if svi.dhcp_relay %}
+ dhcp select relay
+ dhcp relay server-ip {{ svi.dhcp_relay }}
+{% endif %}
+#
+{% endfor %}
+{% if device.default_gateway %}
+ip route-static 0.0.0.0 0.0.0.0 {{ device.default_gateway }}
+#
+{% endif %}
+return
