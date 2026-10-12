@@ -7,6 +7,8 @@ inventory.yml ──▶ validate ──▶ render ──▶ diff vs running ─�
    intent          semantics     IOS / VRP    per-section         parallel SSH, saved
 ```
 
+![strata validate and diff](docs/demo.png)
+
 ## Why
 
 Most small and mid-size networks are configured by hand, one switch at a time. That works until the day someone adds a guest VLAN to the core but forgets one access trunk, and a floor of access points loses guest Wi-Fi with no error anywhere. Strata treats the inventory as the single source of truth and the device configs as build artifacts, so that class of mistake is caught before anything touches a switch.
