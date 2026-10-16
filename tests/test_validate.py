@@ -59,3 +59,24 @@ def test_duplicate_address_across_devices():
 def test_mgmt_ip_equal_to_own_svi_is_fine(make_device):
     dev = make_device(svis=[{"vlan": 99, "ip": "10.0.99.2/24"}])
     assert messages(validate([dev])) == []
+
+
+def test_malformed_routed_ip_is_reported_not_crash(make_device):
+    dev = make_device(interfaces=[{"name": "Gi0/1", "mode": "routed", "ip": "192.0.2.300/24"}])
+    assert any("not a valid CIDR" in m for m in messages(validate([dev])))
+
+
+def test_routed_ip_without_prefix_is_reported(make_device):
+    dev = make_device(interfaces=[{"name": "Gi0/1", "mode": "routed", "ip": "192.0.2.1"}])
+    assert any("needs a prefix length" in m for m in messages(validate([dev])))
+
+
+def test_malformed_default_gateway_is_reported_not_crash(make_device):
+    dev = make_device(svis=[{"vlan": 99, "ip": "10.0.99.2/24"}], default_gateway="not-an-ip")
+    assert any("not a valid IP address" in m for m in messages(validate([dev])))
+
+
+def test_malformed_svi_ip_does_not_crash_fleet_rules(make_device):
+    dev = make_device(svis=[{"vlan": 99, "ip": "not-an-ip"}])
+    issues = validate([dev])
+    assert any("not a valid CIDR" in m for m in messages(issues))
