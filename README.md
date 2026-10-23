@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/Jamie-233/strata/actions/workflows/ci.yml/badge.svg)](https://github.com/Jamie-233/strata/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](pyproject.toml)
+[![Stars](https://img.shields.io/github/stars/Jamie-233/strata.svg?style=flat&color=yellow)](https://github.com/Jamie-233/strata/stargazers)
 
 **A network intent compiler.** Describe the network once in YAML — VLANs, ports, gateways, relay targets — and Strata validates it, compiles it into vendor configs for Cisco IOS and Huawei VRP, shows exactly what would change on each running device, and deploys it safely.
 
