@@ -71,9 +71,22 @@ def test_two_svis_on_one_device_sharing_an_address_is_reported(make_device):
     assert any("10.0.5.1 is also used by" in m for m in messages(validate([dev])))
 
 
-def test_mgmt_ip_equal_to_a_routed_port_is_reported(make_device):
+def test_mgmt_ip_equal_to_a_routed_port_is_fine(make_device):
+    # A router managed through its only routed port is the same self-reference
+    # as a switch managed on its SVI.
     dev = make_device(interfaces=[{"name": "Gi0/0", "mode": "routed", "ip": "10.0.99.2/24"}])
-    assert any("10.0.99.2 is also used by" in m for m in messages(validate([dev])))
+    assert messages(validate([dev])) == []
+
+
+def test_two_routed_ports_sharing_an_address_is_reported(make_device):
+    dev = make_device(
+        interfaces=[
+            {"name": "Gi0/0", "mode": "routed", "ip": "10.0.7.1/24"},
+            {"name": "Gi0/1", "mode": "routed", "ip": "10.0.7.1/24"},
+        ],
+        default_gateway="10.0.7.254",
+    )
+    assert any("10.0.7.1 is also used by" in m for m in messages(validate([dev])))
 
 
 def test_mgmt_plus_one_svi_plus_another_svi_is_reported(make_device):
