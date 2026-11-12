@@ -181,33 +181,43 @@ def svis_and_routing(dev: Device) -> Iterable[Issue]:
 
 @fleet_rule
 def unique_addresses(devices: list[Device]) -> Iterable[Issue]:
-    owners: dict[str, list[str]] = defaultdict(list)
+    # A claimant is (hostname, kind, label). The kind is what makes the rule
+    # decidable: "the same device owns this twice, so it must be fine" is too
+    # lax, because a switch with two SVIs on the same address is a real loop,
+    # while a switch managing itself on one SVI is genuinely normal.
+    owners: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
     for dev in devices:
-        owners[dev.host].append(f"{dev.hostname} (mgmt)")
+        owners[dev.host].append((dev.hostname, "mgmt", "mgmt"))
         for svi in dev.svis:
             addr = _addr(svi.ip)
             if addr is not None:
-                owners[str(addr)].append(f"{dev.hostname} Vlan{svi.vlan}")
+                owners[str(addr)].append((dev.hostname, "svi", f"Vlan{svi.vlan}"))
         for intf in dev.interfaces:
             if intf.mode == "routed" and intf.ip:
                 addr = _addr(intf.ip)
                 if addr is not None:
-                    owners[str(addr)].append(f"{dev.hostname} {intf.name}")
+                    owners[str(addr)].append((dev.hostname, "routed", intf.name))
 
-    for addr, claimants in owners.items():
-        if len(claimants) > 1:
-            # A management IP that equals the device's own SVI is normal.
-            hosts = {c.split()[0] for c in claimants}
-            if len(hosts) == 1:
-                continue
-            for dev in devices:
-                if dev.hostname in hosts:
-                    yield Issue(
-                        Severity.ERROR,
-                        dev.hostname,
-                        f"address {addr} is also used by: {', '.join(claimants)}",
-                    )
-                    break
+    for addr, claims in owners.items():
+        if len(claims) < 2:
+            continue
+        # The single legitimate repetition: one device, one management address,
+        # and exactly one SVI carrying it. Anything else is a duplicate that
+        # will flap ARP or blackhole traffic somewhere.
+        hosts = {c[0] for c in claims}
+        kinds = sorted(c[1] for c in claims)
+        if len(hosts) == 1 and kinds == ["mgmt", "svi"] and len(claims) == 2:
+            continue
+        labels = [f"{host} ({label})" if kind == "mgmt" else f"{host} {label}"
+                  for host, kind, label in claims]
+        for dev in devices:
+            if dev.hostname in hosts:
+                yield Issue(
+                    Severity.ERROR,
+                    dev.hostname,
+                    f"address {addr} is also used by: {', '.join(labels)}",
+                )
+                break
 
 
 @fleet_rule
